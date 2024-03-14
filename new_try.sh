@@ -1,58 +1,40 @@
 #!/bin/bash
 
-# Check if the log file exists
-if [ ! -f "access_log_20210128-185931.log" ]; then
-    echo "Log file access_log_20210128-185931.log not found."
-    exit 1
+# Define the log file
+logfile="data/access_log_20210128-185931.log"
+
+# Ask the user what they want to search for
+echo "Do you want to filter IP or browser? Enter 'ip' or 'browser':"
+read -r search_type
+
+if [[ "$search_type" == "ip" ]]; then
+    # Ask for the IP
+    echo "Enter the IP or partial IP you want to search for:"
+    read -r pattern
+    # Use awk to find the IP and extract the IP addresses
+    found_ips=$(awk -v pattern="$pattern" '$1 ~ pattern {print $1}' "$logfile")
+    
+    if [ -z "$found_ips" ]; then
+        echo "IP address not found in the log file."
+    else
+        echo "Found IP addresses:"
+        echo "$found_ips"
+    fi
+
+elif [[ "$search_type" == "browser" ]]; then
+    # Ask for the browser
+    echo "Enter the exact browser name or part of it you want to search for (e.g., Chrome):"
+    read -r browser
+    # Use awk to find the browser and extract the IP addresses
+    found_entries=$(awk -v browser="$browser" 'tolower($0) ~ tolower(browser) {printf"%s ", $1; for (i=13; i<=NF; i++) printf "%s ", $i; print ""}' "$logfile")
+
+    if [ -z "$found_entries" ]; then
+        echo "Browser not found in the log file."
+    else
+        echo "Found entries:"
+        echo "$found_entries"
+    fi
+
+else
+    echo "Invalid input. Please enter either 'ip' or 'browser'."
 fi
-
-# Function to print usage
-print_usage() {
-    echo "Usage: $0 [-ip <source_ip>] [-browser <browser_name>]"
-    echo "Options:"
-    echo "  -ip <source_ip>         Filter log entries by source IP address"
-    echo "  -browser <browser_name> Filter log entries by browser type"
-    exit 1
-}
-
-# Parse command line arguments
-while [[ $# -gt 0 ]]; do
-    key="$1"
-    case $key in
-        -ip)
-            source_ip="$2"
-            shift 2
-            ;;
-        -browser)
-            browser="$2"
-            shift 2
-            ;;
-        *)
-            print_usage
-            ;;
-    esac
-done
-
-# Construct regex pattern for the browser
-browser_pattern=""
-# If browser is specified, create a regex pattern to match it
-if [ ! -z "$browser" ]; then
-    # Escape special characters in the browser name
-    browser_pattern=$(sed 's/[][\\.*^$/]/\\&/g' <<< "$browser")
-fi
-
-# Filter log entries based on provided options
-filtered_logs=$(awk -v ip="$source_ip" -v browser="$browser_pattern" '
-    {
-        if ($0 ~ ip) {
-            match($0, /"[^"]*"$/);
-            user_agent = substr($0, RSTART+1, RLENGTH-2);
-            if (user_agent ~ browser) {
-                print $0
-            }
-        }
-    }
-' access_log_20210128-185931.log | awk -v ip="$source_ip" -v browser="$browser_pattern" 'match($0, /^[^ ]+/) {ip_found=substr($0, RSTART, RLENGTH)} ip_found ~ ip && $0 ~ browser {print}')
-
-# Print filtered logs
-echo "$filtered_logs"
